@@ -147,7 +147,6 @@ Content-Type: application/json
 
 ```json
 {
-  "reservationId": "BOOK_20251104_010",
   "showId": "SHOW_101",
   "seatIds": ["A1", "A2"],
   "userId": "USER_123",

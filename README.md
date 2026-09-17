@@ -1,159 +1,111 @@
-# 🎬 Saga Coreografada — Sistema de Reserva de Ingressos de Cinema
+# 🎬 Saga Coreografada — Reserva de Ingressos de Cinema
 
-Projeto de estudo que implementa o padrão **Saga Coreografada (Choreographed Saga)** para gerenciar uma transação distribuída de reserva de ingressos de cinema, usando **Spring Boot**, **Apache Kafka** e **MySQL**.
+Projeto de estudo que implementa o padrão **Saga Coreografada (Choreographed Saga)** em uma arquitetura de microsserviços, usando **Spring Boot**, **Apache Kafka** e **MySQL**, simulando o fluxo de reserva de ingressos de cinema (assento → pagamento → confirmação), incluindo os cenários de **compensação** quando algo dá errado.
 
-Não existe um orquestrador central: cada microsserviço reage a eventos publicados por outro serviço e, em seguida, publica seus próprios eventos — inclusive eventos de **compensação** quando algo falha (ex.: pagamento recusado ou assento indisponível).
+Na saga coreografada não existe um orquestrador central: cada serviço publica e consome eventos no Kafka e decide, de forma autônoma, o que fazer a seguir (seguir em frente ou compensar/desfazer a transação anterior).
 
-## 📖 Índice
+---
 
-- [Arquitetura](#-arquitetura)
-- [Módulos do projeto](#-módulos-do-projeto)
-- [Fluxo da saga](#-fluxo-da-saga)
-- [Tópicos Kafka](#-tópicos-kafka)
-- [Stack tecnológica](#-stack-tecnológica)
-- [Estrutura de pastas](#-estrutura-de-pastas)
-- [Pré-requisitos](#-pré-requisitos)
-- [Como executar](#-como-executar)
-- [API — Endpoints](#-api--endpoints)
-- [Cenários de teste](#-cenários-de-teste)
-- [Observações e limitações conhecidas](#-observações-e-limitações-conhecidas)
-
-## 🏗️ Arquitetura
+## 📐 Arquitetura
 
 ```mermaid
-flowchart LR
-    Client([Cliente]) -->|POST /booking-service/bookSeat| BS[booking-service :9191]
+sequenceDiagram
+    participant Cliente
+    participant Booking as booking-service
+    participant Kafka
+    participant Seat as seat-inventory-service
+    participant Payment as payment-service
 
-    BS -->|"movie-booking-events\n(BookingCreatedEvent)"| SI[seat-inventory-service :9292]
-    SI -->|"seat-reserved-topic\n(SeatReservedEvent)"| BS
-    SI -->|"seat-reserved-topic\n(SeatReservedEvent)"| PS[payment-service :9393]
-    PS -->|"payment-events\n(BookingPaymentEvent)"| SI
+    Cliente->>Booking: POST /booking
+    Booking->>Booking: salva reserva (status PENDING)
+    Booking->>Kafka: BookingCreatedEvent (movie-booking-events)
 
-    BS -.-> DB1[(MySQL\nsaga-coreografada)]
-    SI -.-> DB1
+    Kafka->>Seat: BookingCreatedEvent
+    alt assentos disponíveis
+        Seat->>Seat: bloqueia assentos (LOCKED)
+        Seat->>Kafka: SeatReservedEvent (reserved=true) (seat-reserved-topic)
+    else assentos indisponíveis
+        Seat->>Kafka: SeatReservedEvent (reserved=false)
+    end
 
-    Kafka{{Apache Kafka}}
-    BS <-.-> Kafka
-    SI <-.-> Kafka
-    PS <-.-> Kafka
+    Kafka->>Payment: SeatReservedEvent
+    Kafka->>Booking: SeatReservedEvent
+
+    alt reserved=true
+        Payment->>Payment: processa pagamento
+        alt valor <= 2000
+            Payment->>Kafka: BookingPaymentEvent (paymentCompleted=true) (payment-events)
+            Booking->>Booking: confirma reserva (CONFIRMED)
+        else valor > 2000 (falha simulada)
+            Payment->>Kafka: BookingPaymentEvent (paymentCompleted=false)
+            Kafka->>Seat: BookingPaymentEvent
+            Seat->>Seat: libera assentos (AVAILABLE) — compensação
+        end
+    else reserved=false
+        Booking->>Booking: marca reserva como FAILED — compensação
+    end
 ```
 
-Cada serviço só conhece os eventos que consome e produz — não há chamadas síncronas (REST) entre `booking-service`, `seat-inventory-service` e `payment-service`. Toda a coordenação acontece de forma assíncrona via **Apache Kafka**.
+### Tópicos Kafka
 
-## 📦 Módulos do projeto
+| Tópico | Publicado por | Consumido por | Evento |
+| --- | --- | --- | --- |
+| `movie-booking-events` | booking-service | seat-inventory-service | `BookingCreatedEvent` |
+| `seat-reserved-topic` | seat-inventory-service | payment-service, booking-service | `SeatReservedEvent` |
+| `payment-events` | payment-service | seat-inventory-service | `BookingPaymentEvent` |
 
-| Módulo | Tipo | Porta | Responsabilidade |
-|---|---|---|---|
-| `movie-booking-commons` | Biblioteca compartilhada | — | DTOs de request/response, eventos de domínio e constantes de tópicos/grupos Kafka usados por todos os serviços |
-| `booking-service` | Microsserviço (Spring Boot) | `9191` | Ponto de entrada da saga: recebe o pedido de reserva, persiste a *booking* e inicia o fluxo publicando `BookingCreatedEvent` |
-| `seat-inventory-service` | Microsserviço (Spring Boot) | `9292` | Controla o inventário de assentos: trava (`LOCKED`) ou libera assentos conforme o andamento da saga |
-| `payment-service` | Microsserviço (Spring Boot) | `9393` | Simula o processamento de pagamento (serviço *stateless*, sem banco de dados) |
+### Fluxo de compensação
 
-O `movie-booking-commons` precisa ser instalado no repositório Maven local (`mvn install`) antes de compilar os demais serviços, pois eles dependem dele via `groupId: br.com.
-pedrosa`.
+- **Assentos indisponíveis:** `seat-inventory-service` publica `SeatReservedEvent(reserved=false)` → `booking-service` marca a reserva como `FAILED`.
+- **Falha no pagamento** (regra simulada: valor da reserva **maior que 2000**): `payment-service` publica `BookingPaymentEvent(paymentCompleted=false)` → `seat-inventory-service` libera os assentos previamente bloqueados, voltando ao status `AVAILABLE`.
 
-## 🔄 Fluxo da saga
+---
 
-**Caminho feliz (happy path):**
+## 🧩 Módulos do projeto
 
-1. O cliente chama `POST /booking-service/bookSeat` no `booking-service`.
-2. `booking-service` salva a reserva (status inicial `CONFIRMED`) e publica `BookingCreatedEvent` no tópico `movie-booking-events`.
-3. `seat-inventory-service` consome o evento, verifica se todos os assentos pedidos estão `AVAILABLE`; se sim, marca-os como `LOCKED` e publica `SeatReservedEvent(reserved=true)` no tópico `seat-reserved-topic`.
-4. Esse evento é consumido por **dois** serviços em paralelo:
-    - `booking-service`: apenas registra em log que a reserva foi concluída.
-    - `payment-service`: processa o pagamento. Se `amount > 2000`, o pagamento é recusado; caso contrário, é aprovado. O resultado é publicado como `BookingPaymentEvent` no tópico `payment-events`.
-5. `seat-inventory-service` consome `payment-events`; se o pagamento foi aprovado, o fluxo termina com sucesso.
+| Módulo | Descrição | Porta |
+| --- | --- | --- |
+| [`movie-booking-commons`](./movie-booking-commons) | Biblioteca compartilhada com eventos (`BookingCreatedEvent`, `SeatReservedEvent`, `BookingPaymentEvent`), DTOs (`BookingRequest`, `BookingResponse`) e constantes de configuração do Kafka. Usada como dependência pelos demais serviços. | — |
+| [`booking-service`](./booking-service) | Recebe as solicitações de reserva, persiste a reserva (`PENDING`), publica o evento de criação e reage aos eventos de reserva de assento, confirmando (`CONFIRMED`) ou falhando (`FAILED`) a reserva. | `9191` |
+| [`seat-inventory-service`](./seat-inventory-service) | Controla o inventário de assentos por sala/sessão. Bloqueia assentos (`LOCKED`) quando uma reserva é criada e os libera (`AVAILABLE`) em caso de falha no pagamento. | `8080` (padrão) |
+| [`payment-service`](./payment-service) | Simula um gateway de pagamento. Processa o pagamento após a confirmação de assento e publica sucesso ou falha (falha simulada quando o valor é maior que `2000`). | `9393` |
 
-**Caminhos de compensação (rollback):**
+---
 
-- **Assento indisponível:** se `seat-inventory-service` não conseguir travar os assentos, publica `SeatReservedEvent(reserved=false)`. O `booking-service` reage marcando a reserva como `FAILED`; o `payment-service` ignora o processamento de pagamento para esse evento.
-- **Pagamento recusado:** se `payment-service` recusa o pagamento (`amount > 2000`), publica `BookingPaymentEvent(paymentCompleted=false)`. O `seat-inventory-service` reage liberando os assentos (volta para `AVAILABLE`) e republica `SeatReservedEvent(reserved=false)` no `seat-reserved-topic`, o que aciona o `booking-service` a marcar a reserva como `FAILED` — fechando o ciclo de compensação.
+## 🛠️ Tecnologias
 
-## 📡 Tópicos Kafka
+- Java 25
+- Spring Boot 4.0.8 (Web, Data JPA, Kafka)
+- Apache Kafka (KRaft, sem Zookeeper)
+- MySQL 8
+- Lombok
+- springdoc-openapi (Swagger UI no `booking-service`)
+- Maven (multi-módulo, com o `movie-booking-commons` como dependência local)
+- Docker / Docker Compose
 
-| Tópico | Produtor | Consumidor(es) | Grupo(s) | Evento |
-|---|---|---|---|---|
-| `movie-booking-events` | booking-service | seat-inventory-service | `seat-event-group` | `BookingCreatedEvent` |
-| `seat-reserved-topic` | seat-inventory-service | booking-service, payment-service | `movie-booking-group`, `payment-event-group` | `SeatReservedEvent` |
-| `payment-events` | payment-service | seat-inventory-service | `seat-event-group` | `BookingPaymentEvent` |
+---
 
-Os tópicos `movie-booking-events` e `seat-reserved-topic` são criados automaticamente na subida da aplicação via `NewTopic` bean (3 partições, fator de replicação 1). O tópico `payment-events` depende da criação automática de tópicos do broker Kafka.
+## ▶️ Como executar
 
-## 🛠️ Stack tecnológica
+### Pré-requisitos
 
-- **Java 25**
-- **Spring Boot 4.0.8** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`)
-- **Spring for Apache Kafka** (`spring-kafka`) — comunicação assíncrona entre serviços
-- **Apache Kafka** (modo KRaft, sem Zookeeper) — imagem `apache/kafka:latest`
-- **MySQL** (driver `mysql-connector-j`) — persistência de `booking-service` e `seat-inventory-service`
-- **springdoc-openapi** — documentação Swagger/OpenAPI no `booking-service`
-- **Lombok** — redução de boilerplate
-- **Maven** — build e gerenciamento de dependências
-- **Docker Compose** — provisionamento do broker Kafka
-
-## 📁 Estrutura de pastas
-
-```
-saga-coreografada/
-├── docker-compose.yml              # Broker Kafka (KRaft)
-├── movie-booking-commons/          # Biblioteca compartilhada (eventos, DTOs, constantes)
-│   └── src/main/java/br/com/pedrosa/
-│       ├── common/                 # KafkaConfigProperties (tópicos e grupos)
-│       ├── events/                 # BookingCreatedEvent, SeatReservedEvent, BookingPaymentEvent
-│       ├── request/                # BookingRequest
-│       └── response/                # BookingResponse
-├── booking-service/                 # Porta 9191
-│   └── src/main/java/br/com/pedrosa/
-│       ├── controller/              # BookingController
-│       ├── service/                 # BookingService
-│       ├── entity/                  # Booking
-│       ├── repository/              # BookingRepository
-│       ├── listener/                # MovieBookingListener (consome seat-reserved-topic)
-│       ├── messaging/                # BookingEventProducer (publica movie-booking-events)
-│       └── config/                   # KafkaConfig (cria o tópico)
-├── seat-inventory-service/          # Porta 9292
-│   └── src/main/java/br/com/pedrosa/
-│       ├── entity/                   # SeatInventory
-│       ├── repository/               # SeatInventoryRepository
-│       ├── service/                  # SeatInventoryService
-│       ├── listener/                 # SeatInventoryListener, PaymentStatusListener
-│       ├── messaging/                # SeatReserveProducer
-│       └── utils/enums/              # SeatStatus (AVAILABLE, LOCKED, RESERVED)
-└── payment-service/                  # Porta 9393
-    └── src/main/java/br/com/pedrosa/
-        ├── service/                   # PaymentService
-        ├── listener/                  # SeatReserveEventConsumer
-        ├── producer/                  # PaymentEventsProducer
-        └── exception/                 # PaymentServiceException
-```
-
-## ✅ Pré-requisitos
-
-- JDK 25+
-- Maven 3.9+
+- JDK 25
+- Maven 3.9+ (ou use o `mvnw` incluso em cada serviço)
 - Docker e Docker Compose
-- MySQL 8 (local ou em container) com um banco chamado `saga-coreografada`
 
-> O `docker-compose.yml` do repositório provisiona **apenas o broker Kafka**. O MySQL precisa ser executado separadamente (localmente ou em outro container).
-
-## 🚀 Como executar
-
-**1. Clone o repositório**
+### 1. Subir a infraestrutura (MySQL + Kafka)
 
 ```bash
-git clone https://github.com/fabiopedrosa1980/saga-coreografada.git
-cd saga-coreografada
+docker compose up -d
 ```
 
-**2. Suba o Kafka e Mysql**
+Isso sobe:
+- **MySQL** em `localhost:3306` (banco `saga-coreografada`, usuário `root`, senha `Password`)
+- **Kafka** (modo KRaft) em `localhost:9092`
 
-```bash
-docker-compose up -d
+### 2. Instalar o módulo compartilhado
 
-
-> Usuário/senha padrão usados nos `application.yml` são `root` / `Password`. Ajuste conforme seu ambiente.
-
-**4. Instale o módulo compartilhado**
+Antes de rodar os serviços, instale o `movie-booking-commons` no repositório Maven local, já que os demais módulos dependem dele:
 
 ```bash
 cd movie-booking-commons
@@ -161,59 +113,90 @@ mvn clean install
 cd ..
 ```
 
-**5. Suba cada microsserviço em um terminal separado**
+### 3. Subir os microsserviços
 
-```bash
-cd booking-service && ./mvnw spring-boot:run
-```
+Em terminais separados (ou usando sua IDE), rode cada aplicação:
+
 ```bash
 cd seat-inventory-service && ./mvnw spring-boot:run
-```
-```bash
 cd payment-service && ./mvnw spring-boot:run
+cd booking-service && ./mvnw spring-boot:run
 ```
 
-| Serviço | URL base |
-|---|---|
-| booking-service | http://localhost:9191 |
-| seat-inventory-service | http://localhost:9292 |
-| payment-service | http://localhost:9393 |
+> As tabelas são criadas automaticamente (`ddl-auto: update`) e o `seat-inventory-service` já carrega assentos de exemplo via `data.sql` (sessões `SHOW_101`, `SHOW_202` e `SHOW_303`).
 
-## 📡 API — Endpoints
+---
 
-### `POST /booking-service/bookSeat`
+## 📡 API — booking-service
 
-Cria uma reserva e dispara o início da saga.
+Base URL: `http://localhost:9191/booking`
 
-**Request body** (`BookingRequest`):
+Documentação interativa (Swagger UI): `http://localhost:9191/swagger-ui.html`
+
+### Criar uma reserva
+
+```
+POST /booking
+Content-Type: application/json
+```
 
 ```json
 {
-  "showId": "show-123",
+  "reservationId": "BOOK_20251104_010",
+  "showId": "SHOW_101",
   "seatIds": ["A1", "A2"],
-  "userId": "user-456",
-  "timestamp": "2026-09-16T20:00:00Z",
+  "userId": "USER_123",
+  "timestamp": "2025-11-04T20:00:00Z",
   "amount": 1500
 }
 ```
 
-**Response** (`BookingResponse`):
+**Resposta (200):**
 
 ```json
 {
-  "reservationId": "f3a1c9d2",
+  "reservationId": "BOOK_20251104_010",
+  "status": "PENDING"
+}
+```
+
+O status evolui de forma assíncrona conforme a saga avança: `PENDING` → `CONFIRMED` (sucesso) ou `PENDING` → `FAILED` (falha na reserva de assento ou no pagamento).
+
+### Consultar o status de uma reserva
+
+```
+GET /booking/{reservationId}
+```
+
+**Resposta (200):**
+
+```json
+{
+  "reservationId": "BOOK_20251104_010",
   "status": "CONFIRMED"
 }
 ```
 
-> Como o `booking-service` inclui `springdoc-openapi-starter-webmvc-ui`, a documentação interativa (Swagger UI) fica disponível em `http://localhost:9191/swagger-ui.html` com o serviço em execução.
+> 💡 Para forçar o cenário de falha de pagamento (compensação), envie um `amount` maior que `2000`.
 
-## 🧪 Cenários de teste
+---
 
-| Cenário | Como reproduzir | Resultado esperado |
-|---|---|---|
-| **Sucesso completo** | `amount` ≤ 2000 e assentos disponíveis | Assentos ficam `LOCKED`, pagamento aprovado, reserva permanece `CONFIRMED` |
-| **Falha de pagamento** | `amount` > 2000 | `payment-service` recusa o pagamento → `seat-inventory-service` libera os assentos (`AVAILABLE`) → `booking-service` marca a reserva como `FAILED` |
-| **Assento indisponível** | Solicitar um assento já `LOCKED`/`RESERVED` | `seat-inventory-service` recusa a reserva → `booking-service` marca a reserva como `FAILED` sem acionar o pagamento |
+## 📁 Estrutura do repositório
 
-Para acompanhar o fluxo, observe os logs dos três serviços simultaneamente — cada etapa da saga é registrada (`log.info`) em quem publica e em quem consome cada evento.
+```
+saga-coreografada/
+├── booking-service/            # Orquestra a reserva do ponto de vista do usuário
+├── movie-booking-commons/      # Eventos, DTOs e constantes compartilhadas
+├── payment-service/            # Simulação do gateway de pagamento
+├── seat-inventory-service/     # Controle de inventário/bloqueio de assentos
+├── docker-compose.yml          # Infraestrutura local (MySQL + Kafka)
+└── README.md
+```
+
+---
+
+## 📌 Observações
+
+- Este é um projeto de estudo focado em ilustrar o padrão de **Saga Coreografada** com Kafka; não há autenticação, validações completas de negócio nem tratamento exaustivo de erros.
+- O `seat-inventory-service` não define uma porta customizada no `application.yml`, portanto sobe na porta padrão do Spring Boot (`8080`).
+- A regra "pagamento falha quando `amount > 2000`" é apenas uma simulação para exercitar o fluxo de compensação.

@@ -80,8 +80,8 @@ Os tópicos `movie-booking-events` e `seat-reserved-topic` são criados automati
 
 ## 🛠️ Stack tecnológica
 
-- **Java 21**
-- **Spring Boot 3.5.7** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`)
+- **Java 25**
+- **Spring Boot 4.0.8** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`)
 - **Spring for Apache Kafka** (`spring-kafka`) — comunicação assíncrona entre serviços
 - **Apache Kafka** (modo KRaft, sem Zookeeper) — imagem `apache/kafka:latest`
 - **MySQL** (driver `mysql-connector-j`) — persistência de `booking-service` e `seat-inventory-service`
@@ -128,7 +128,7 @@ saga-coreografada/
 
 ## ✅ Pré-requisitos
 
-- JDK 21+
+- JDK 25+
 - Maven 3.9+
 - Docker e Docker Compose
 - MySQL 8 (local ou em container) com um banco chamado `saga-coreografada`
@@ -197,7 +197,6 @@ Cria uma reserva e dispara o início da saga.
 
 ```json
 {
-  "reservationId": "res-001",
   "showId": "show-123",
   "seatIds": ["A1", "A2"],
   "userId": "user-456",

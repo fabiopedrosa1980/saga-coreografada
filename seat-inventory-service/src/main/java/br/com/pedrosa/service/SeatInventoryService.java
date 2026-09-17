@@ -42,11 +42,12 @@ public class SeatInventoryService {
                 s.setCurrentBookingId(event.bookingId());
             });
             seatInventoryRepository.saveAll(seats);
+
             // Publish seat reserved event
             seatReserveProducer
                     .publishSeatReserveEvents(new SeatReservedEvent(event.bookingId(), true, event.amount()));
             log.info("SeatInventoryService:: Seats locked successfully for bookingId {}", event.bookingId());
-        }else{
+        } else {
             log.warn("SeatInventoryService:: Seat locking failed for bookingId {}. Some seats are not available.", event.bookingId());
             // Publish seat reserved event with failure
             seatReserveProducer

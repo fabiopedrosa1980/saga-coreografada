@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 
@@ -31,7 +32,7 @@ public class PaymentService {
                 // failure events
                 eventsProducer.publishPaymentFailureEvent(event);
                 //throw new RuntimeException("Payment amount exceeds limit");
-            }else{
+            } else {
                 // success event
                 kafkaTemplate.send("payment-events",
                         new BookingPaymentEvent(event.bookingId(), true, event.amount()));
@@ -40,8 +41,7 @@ public class PaymentService {
 
             }
 
-
-        }catch (Exception e){
+        } catch (Exception e) {
             log.error("❌ Payment failed for bookingId: {}. Reason: {}", event.bookingId(), e.getMessage());
             throw new PaymentServiceException("Payment processing failed for bookingId: " + event.bookingId());
         }

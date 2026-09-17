@@ -1,6 +1,7 @@
 package br.com.pedrosa.utils.mapper;
 
 import br.com.pedrosa.entity.Booking;
+import br.com.pedrosa.enums.BookingStatus;
 import br.com.pedrosa.request.BookingRequest;
 
 import java.util.UUID;
@@ -15,7 +16,7 @@ public class BookingRequestToEntityMapper {
         booking.setBookingCode(reservationCode);
         booking.setSeatIds(request.seatIds());
         booking.setUserId(request.userId());
-        booking.setStatus("CONFIRMED");
+        booking.setStatus(BookingStatus.PENDING.name());
         booking.setCreatedAt(java.time.Instant.now());
         booking.setAmount(request.amount());
         return booking;

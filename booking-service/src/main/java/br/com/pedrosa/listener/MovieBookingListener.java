@@ -18,13 +18,14 @@ public class MovieBookingListener {
     private final BookingService service;
 
     @KafkaListener(topics = SEAT_RESERVED_TOPIC, groupId = MOVIE_BOOKING_GROUP)
-    public void consumeSeatReserveEvents(SeatReservedEvent event){
+    public void consumeSeatReserveEvents(SeatReservedEvent event) {
 
         log.info("MovieBookingListener:: Consuming seatReserved event");
 
-        if(event.reserved()){
+        if (event.reserved()) {
+            service.confirmeBooking(event.bookingId());
             log.info("Booking process completed for bookingId: {}", event.bookingId());
-        }else{
+        } else {
             //rollback
             log.info("Seat reservation failed for bookingId: {}", event.bookingId());
             service.handleBookingOnSeatReservationFailure(event.bookingId());

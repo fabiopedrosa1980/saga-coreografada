@@ -3,26 +3,25 @@ package br.com.pedrosa.controller;
 import br.com.pedrosa.request.BookingRequest;
 import br.com.pedrosa.response.BookingResponse;
 import br.com.pedrosa.service.BookingService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/booking-service")
+@RequestMapping("/booking")
+@RequiredArgsConstructor
 public class BookingController {
 
     private final BookingService bookingService;
 
-    public BookingController(BookingService bookingService) {
-        this.bookingService = bookingService;
-    }
-
-    // Endpoint to handle seat booking requests
-    @PostMapping("/bookSeat")
-    public ResponseEntity<?> bookSeat(@RequestBody BookingRequest request) {
+    @PostMapping
+    public ResponseEntity<BookingResponse> bookSeat(@RequestBody BookingRequest request) {
         BookingResponse response = bookingService.bookSeats(request);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("{reservationId}")
+    public ResponseEntity<BookingResponse> getStatus(@PathVariable String reservationId){
+        return ResponseEntity.ok(bookingService.findByBookingCode(reservationId));
     }
 }

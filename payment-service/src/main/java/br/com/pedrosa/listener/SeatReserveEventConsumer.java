@@ -21,9 +21,9 @@ public class SeatReserveEventConsumer {
     public void consume(SeatReservedEvent event) {
         try {
             log.info("Consumed SeatReservedEvent for bookingId: {} and event {}", event.bookingId(), event);
-            if(event.reserved()) {
+            if (event.reserved()) {
                 paymentService.processPayment(event);
-            }else{
+            } else {
                 log.info("skipping payment processing as seat reservation failed for bookingId: {}", event.bookingId());
             }
         } catch (Exception e) {

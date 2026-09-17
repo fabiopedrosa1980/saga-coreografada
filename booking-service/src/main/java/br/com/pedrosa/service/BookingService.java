@@ -1,6 +1,7 @@
 package br.com.pedrosa.service;
 
 import br.com.pedrosa.entity.Booking;
+import br.com.pedrosa.enums.BookingStatus;
 import br.com.pedrosa.events.BookingCreatedEvent;
 import br.com.pedrosa.messaging.BookingEventProducer;
 import br.com.pedrosa.repository.BookingRepository;
@@ -51,6 +52,17 @@ public class BookingService {
         return response;
     }
 
+    public void confirmeBooking(String bookingId){
+        var booking = bookingRepository.findByBookingCode(bookingId);
+        booking.setStatus(BookingStatus.CONFIRMED.name());
+        bookingRepository.save(booking);
+    }
+
+    public BookingResponse findByBookingCode(String bookingId){
+        var booking = bookingRepository.findByBookingCode(bookingId);
+        return EntityToBookingResponseMapper.map(booking);
+    }
+
     private BookingCreatedEvent buildBookingCreateEvents(Booking savedReservation) {
         return new BookingCreatedEvent(savedReservation.getBookingCode(), savedReservation.getUserId(), savedReservation.getShowId(), savedReservation.getSeatIds(), savedReservation.getAmount());
     }
@@ -58,12 +70,12 @@ public class BookingService {
 
     public void handleBookingOnSeatReservationFailure(String bookingId) {
         log.info("BookingService:: Handling booking failure for bookingId {}", bookingId);
-        var bookingDetails=bookingRepository.findByBookingCode(bookingId);
-        if(bookingDetails!=null){
-            bookingDetails.setStatus("FAILED");
+        var bookingDetails = bookingRepository.findByBookingCode(bookingId);
+        if (bookingDetails != null) {
+            bookingDetails.setStatus(BookingStatus.FAILED.name());
             bookingRepository.save(bookingDetails);
             log.info("BookingService:: Booking marked as FAILED for bookingId {}", bookingId);
-        }else{
+        } else {
             log.warn("BookingService:: No booking found with bookingId {}", bookingId);
         }
 

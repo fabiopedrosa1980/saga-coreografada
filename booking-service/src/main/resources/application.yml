@@ -5,7 +5,7 @@ spring:
     name: booking-service
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/saga-coreografada
+    url: jdbc:mysql://localhost:3306/booking_db
     username: root
     password: Password
 

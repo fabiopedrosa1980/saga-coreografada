@@ -1,4 +1,9 @@
+server:
+  port: 9393
+
 spring:
+  application:
+    name: payment-service
   kafka:
     bootstrap-servers: localhost:9092
     producer:
@@ -10,6 +15,3 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
-
-server:
-  port: 9393

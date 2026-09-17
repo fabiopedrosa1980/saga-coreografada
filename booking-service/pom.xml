@@ -8,7 +8,7 @@
 		<version>3.5.7</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.javatechie</groupId>
+	<groupId>br.com.pedrosa</groupId>
 	<artifactId>booking-service</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>booking-service</name>
@@ -56,7 +56,7 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.javatechie</groupId>
+			<groupId>br.com.pedrosa</groupId>
 			<artifactId>movie-booking-commons</artifactId>
 			<version>1.0-SNAPSHOT</version>
 		</dependency>

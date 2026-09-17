@@ -144,20 +144,11 @@ git clone https://github.com/fabiopedrosa1980/saga-coreografada.git
 cd saga-coreografada
 ```
 
-**2. Suba o Kafka**
+**2. Suba o Kafka e Mysql**
 
 ```bash
-docker compose up -d
-```
+docker-compose up -d
 
-**3. Suba um MySQL (se ainda não tiver um)**
-
-```bash
-docker run -d --name mysql-saga \
-  -e MYSQL_ROOT_PASSWORD=Password \
-  -e MYSQL_DATABASE=saga-coreografada \
-  -p 3306:3306 mysql:8
-```
 
 > Usuário/senha padrão usados nos `application.yml` são `root` / `Password`. Ajuste conforme seu ambiente.
 

@@ -49,7 +49,7 @@ Cada serviço só conhece os eventos que consome e produz — não há chamadas 
 | `seat-inventory-service` | Microsserviço (Spring Boot) | `9292` | Controla o inventário de assentos: trava (`LOCKED`) ou libera assentos conforme o andamento da saga |
 | `payment-service` | Microsserviço (Spring Boot) | `9393` | Simula o processamento de pagamento (serviço *stateless*, sem banco de dados) |
 
-O `movie-booking-commons` precisa ser instalado no repositório Maven local (`mvn install`) antes de compilar os demais serviços, pois eles dependem dele via `groupId: br.com
+O `movie-booking-commons` precisa ser instalado no repositório Maven local (`mvn install`) antes de compilar os demais serviços, pois eles dependem dele via `groupId: br.com.
 pedrosa`.
 
 ## 🔄 Fluxo da saga

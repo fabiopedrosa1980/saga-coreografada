@@ -225,16 +225,3 @@ Cria uma reserva e dispara o início da saga.
 | **Assento indisponível** | Solicitar um assento já `LOCKED`/`RESERVED` | `seat-inventory-service` recusa a reserva → `booking-service` marca a reserva como `FAILED` sem acionar o pagamento |
 
 Para acompanhar o fluxo, observe os logs dos três serviços simultaneamente — cada etapa da saga é registrada (`log.info`) em quem publica e em quem consome cada evento.
-
-## ⚠️ Observações e limitações conhecidas
-
-Por ser um projeto de estudo do padrão Saga Coreografada, alguns pontos valem atenção caso o código evolua para produção:
-
-- A reserva é gravada com status `CONFIRMED` **antes** de a saga terminar; só é revertida para `FAILED` em caso de compensação — não há um estado intermediário como `PENDING`.
-- `booking-service` e `seat-inventory-service` apontam para o **mesmo banco** (`saga-coreografada`), o que foge do princípio de *database-per-service* geralmente recomendado em arquiteturas de microsserviços.
-- O `payment-events` não possui um bean `NewTopic` explícito como os demais tópicos, dependendo da criação automática de tópicos no broker Kafka.
-- Não há mecanismos de idempotência/deduplicação de eventos nem *dead-letter topics* configurados — recomendado para cenários com reentrega de mensagens.
-
-## 📄 Licença
-
-Não há licença definida no repositório original. Adicione um arquivo `LICENSE` caso deseje formalizar os termos de uso.

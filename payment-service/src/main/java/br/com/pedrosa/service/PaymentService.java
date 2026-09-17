@@ -18,9 +18,7 @@ public class PaymentService {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @Autowired
-    private PaymentEventsProducer eventsProducer;
-
+    private final PaymentEventsProducer eventsProducer;
 
     public void processPayment(SeatReservedEvent event) {
 

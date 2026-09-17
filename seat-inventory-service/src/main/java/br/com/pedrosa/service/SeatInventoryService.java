@@ -6,6 +6,7 @@ import br.com.pedrosa.events.SeatReservedEvent;
 import br.com.pedrosa.messaging.SeatReserveProducer;
 import br.com.pedrosa.repository.SeatInventoryRepository;
 import br.com.pedrosa.utils.enums.SeatStatus;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -13,17 +14,12 @@ import java.util.List;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class SeatInventoryService {
 
     private final SeatInventoryRepository seatInventoryRepository;
+
     private final SeatReserveProducer seatReserveProducer;
-
-    public SeatInventoryService(SeatInventoryRepository seatInventoryRepository,
-                                SeatReserveProducer seatReserveProducer) {
-        this.seatReserveProducer = seatReserveProducer;
-        this.seatInventoryRepository = seatInventoryRepository;
-    }
-
 
     // Add service methods to manage seat inventory
 

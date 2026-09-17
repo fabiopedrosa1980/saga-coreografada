@@ -17,7 +17,6 @@ public class SeatReserveEventConsumer {
 
     private final PaymentService paymentService;
 
-
     @KafkaListener(topics = SEAT_RESERVED_TOPIC, groupId = PAYMENT_EVENT_GROUP)
     public void consume(SeatReservedEvent event) {
         try {

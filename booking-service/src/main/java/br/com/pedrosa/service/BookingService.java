@@ -8,22 +8,19 @@ import br.com.pedrosa.request.BookingRequest;
 import br.com.pedrosa.response.BookingResponse;
 import br.com.pedrosa.utils.mapper.EntityToBookingResponseMapper;
 import br.com.pedrosa.utils.mapper.BookingRequestToEntityMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class BookingService {
 
     private final BookingRepository bookingRepository;
 
     private final BookingEventProducer bookingEventProducer;
-
-    public BookingService(BookingRepository bookingRepository, BookingEventProducer bookingEventProducer) {
-        this.bookingEventProducer = bookingEventProducer;
-        this.bookingRepository = bookingRepository;
-    }
 
     /**
      * Reserves seats for a given show and user.

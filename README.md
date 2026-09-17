@@ -4,6 +4,8 @@ Projeto de estudo que implementa o padrão **Saga Coreografada (Choreographed Sa
 
 Na saga coreografada não existe um orquestrador central: cada serviço publica e consome eventos no Kafka e decide, de forma autônoma, o que fazer a seguir (seguir em frente ou compensar/desfazer a transação anterior).
 
+Cada serviço também é dono exclusivo do seu próprio banco de dados (**database per service**) — não há acesso direto a tabelas de outro serviço; toda comunicação entre eles acontece via eventos no Kafka.
+
 ---
 
 ## 📐 Arquitetura
@@ -63,12 +65,12 @@ sequenceDiagram
 
 ## 🧩 Módulos do projeto
 
-| Módulo | Descrição | Porta |
-| --- | --- | --- |
-| [`movie-booking-commons`](./movie-booking-commons) | Biblioteca compartilhada com eventos (`BookingCreatedEvent`, `SeatReservedEvent`, `BookingPaymentEvent`), DTOs (`BookingRequest`, `BookingResponse`) e constantes de configuração do Kafka. Usada como dependência pelos demais serviços. | — |
-| [`booking-service`](./booking-service) | Recebe as solicitações de reserva, persiste a reserva (`PENDING`), publica o evento de criação e reage aos eventos de reserva de assento, confirmando (`CONFIRMED`) ou falhando (`FAILED`) a reserva. | `9191` |
-| [`seat-inventory-service`](./seat-inventory-service) | Controla o inventário de assentos por sala/sessão. Bloqueia assentos (`LOCKED`) quando uma reserva é criada e os libera (`AVAILABLE`) em caso de falha no pagamento. | `8080` (padrão) |
-| [`payment-service`](./payment-service) | Simula um gateway de pagamento. Processa o pagamento após a confirmação de assento e publica sucesso ou falha (falha simulada quando o valor é maior que `2000`). | `9393` |
+| Módulo | Descrição | Porta | Banco de dados |
+| --- | --- | --- | --- |
+| [`movie-booking-commons`](./movie-booking-commons) | Biblioteca compartilhada com eventos (`BookingCreatedEvent`, `SeatReservedEvent`, `BookingPaymentEvent`), DTOs (`BookingRequest`, `BookingResponse`) e constantes de configuração do Kafka. Usada como dependência pelos demais serviços. | — | — |
+| [`booking-service`](./booking-service) | Recebe as solicitações de reserva, persiste a reserva (`PENDING`), publica o evento de criação e reage aos eventos de reserva de assento, confirmando (`CONFIRMED`) ou falhando (`FAILED`) a reserva. | `9191` | MySQL próprio — `booking_db` (`localhost:3306`) |
+| [`seat-inventory-service`](./seat-inventory-service) | Controla o inventário de assentos por sala/sessão. Bloqueia assentos (`LOCKED`) quando uma reserva é criada e os libera (`AVAILABLE`) em caso de falha no pagamento. | `8080` (padrão) | MySQL próprio — `seat_inventory_db` (`localhost:3308`) |
+| [`payment-service`](./payment-service) | Simula um gateway de pagamento. Processa o pagamento após a confirmação de assento e publica sucesso ou falha (falha simulada quando o valor é maior que `2000`). | `9393` | Sem persistência própria ainda |
 
 ---
 
@@ -93,15 +95,18 @@ sequenceDiagram
 - Maven 3.9+ (ou use o `mvnw` incluso em cada serviço)
 - Docker e Docker Compose
 
-### 1. Subir a infraestrutura (MySQL + Kafka)
+### 1. Subir a infraestrutura (MySQL por serviço + Kafka)
 
 ```bash
 docker compose up -d
 ```
 
 Isso sobe:
-- **MySQL** em `localhost:3306` (banco `saga-coreografada`, usuário `root`, senha `Password`)
+- **MySQL do booking-service** em `localhost:3306` (banco `booking_db`, usuário `root`, senha `Password`)
+- **MySQL do seat-inventory-service** em `localhost:3308` (banco `seat_inventory_db`, usuário `root`, senha `Password`)
 - **Kafka** (modo KRaft) em `localhost:9092`
+
+Cada serviço tem seu próprio container MySQL e seu próprio volume Docker — não existe mais um banco único compartilhado entre os serviços.
 
 ### 2. Instalar o módulo compartilhado
 
@@ -189,7 +194,7 @@ saga-coreografada/
 ├── movie-booking-commons/      # Eventos, DTOs e constantes compartilhadas
 ├── payment-service/            # Simulação do gateway de pagamento
 ├── seat-inventory-service/     # Controle de inventário/bloqueio de assentos
-├── docker-compose.yml          # Infraestrutura local (MySQL + Kafka)
+├── docker-compose.yml          # Infraestrutura local (1 MySQL por serviço + Kafka)
 └── README.md
 ```
 
@@ -200,3 +205,5 @@ saga-coreografada/
 - Este é um projeto de estudo focado em ilustrar o padrão de **Saga Coreografada** com Kafka; não há autenticação, validações completas de negócio nem tratamento exaustivo de erros.
 - O `seat-inventory-service` não define uma porta customizada no `application.yml`, portanto sobe na porta padrão do Spring Boot (`8080`).
 - A regra "pagamento falha quando `amount > 2000`" é apenas uma simulação para exercitar o fluxo de compensação.
+- Cada serviço com persistência tem seu próprio container MySQL e seu próprio schema (`booking_db` e `seat_inventory_db`), seguindo o padrão **database per service**. Se o `payment-service` ganhar persistência no futuro, o ideal é seguir o mesmo padrão: um MySQL dedicado (ex: `payment_db`) em vez de reaproveitar um banco existente.
+- Ao trocar as portas/bancos no `docker-compose.yml`, lembre que o mapeamento de portas segue o formato `"porta_no_host:porta_no_container"` — o MySQL dentro do container sempre escuta na `3306`, então só o lado esquerdo do mapeamento deve mudar entre os serviços.

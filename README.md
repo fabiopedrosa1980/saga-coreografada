@@ -76,7 +76,7 @@ sequenceDiagram
 
 ## 🛠️ Tecnologias
 
-- Java 25
+- Java 27
 - Spring Boot 4.0.8 (Web, Data JPA, Kafka)
 - Apache Kafka (KRaft, sem Zookeeper)
 - MySQL 8
